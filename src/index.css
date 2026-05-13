@@ -373,10 +373,10 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────
-   v3 LAYOUT FIX — appended after initial additions
+   v3 LAYOUT FIX v2 — corrected scroll containment
    ───────────────────────────────────────────────────────────────── */
 
-/* AllFeedback page: proper height containment so panels scroll */
+/* AllFeedback page: fixed height so children can scroll */
 .all-feedback-page {
   height: 100vh;
   display: flex;
@@ -384,23 +384,27 @@
   overflow: hidden;
 }
 
-/* Inherit shared header styles */
-.all-feedback-page .draft-view-header {
-  flex-shrink: 0;
-}
+.all-feedback-page .draft-view-header { flex-shrink: 0; }
 
-/* Override: remove overflow hidden from row — children scroll themselves */
+/* Tabs must not shrink — they sit between header and scroll area */
+.af-tabs { flex-shrink: 0; }
+
+/* Timeline row: flex: 1 fills remaining height; overflow: hidden clips children */
 .af-timeline-layout {
-  overflow: visible;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
-/* Both scroll panels need min-height: 0 so flex doesn't block overflow */
+/* Both scroll panels need min-height: 0 so flex lets them shrink and overflow-y kicks in */
 .af-version-list,
 .af-sections-pane {
   min-height: 0;
 }
 
-/* Items view: same fix */
+/* Items view: fill remaining height and scroll */
 .af-items-view {
+  flex: 1;
   min-height: 0;
+  overflow-y: auto;
 }
