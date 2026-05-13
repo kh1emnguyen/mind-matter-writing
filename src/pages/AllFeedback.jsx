@@ -271,7 +271,7 @@ export default function AllFeedback({ draftTitle, onBack }) {
   }
 
   return (
-    <div className="draft-view">
+    <div className="all-feedback-page">
 
       <div className="draft-view-header">
         <button className="back-btn" onClick={onBack}>← Back to Draft</button>
