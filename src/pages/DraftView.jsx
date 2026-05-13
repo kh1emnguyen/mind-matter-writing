@@ -7,20 +7,20 @@ import FeedbackItem from '../components/FeedbackItem'
 marked.setOptions({ breaks: true })
 
 const SECTIONS = [
-  { key: 'progress_check',    label: 'Progress Check',     icon: '◎', itemSection: null },
-  { key: 'writing_quality',   label: 'Writing Quality',    icon: '✦', itemSection: null },
-  { key: 'quick_wins',        label: 'Quick Wins',         icon: '↑', itemSection: 'quick_wins' },
-  { key: 'friendly_critique', label: 'Friendly Critique',  icon: '→', itemSection: 'friendly_critique' },
-  { key: 'questions_answered',label: 'Questions Answered', icon: '?', itemSection: null },
-  { key: 'questions_to_ponder', label: 'Questions to Ponder', icon: '∿', itemSection: 'questions_ponder' },
-  { key: 'sources',           label: 'Sources',            icon: '≡', itemSection: null },
+  { key: 'progress_check',     label: 'Progress Check',     icon: '◎', itemSection: null },
+  { key: 'writing_quality',    label: 'Writing Quality',    icon: '✦', itemSection: null },
+  { key: 'quick_wins',         label: 'Quick Wins',         icon: '↑', itemSection: 'quick_wins' },
+  { key: 'friendly_critique',  label: 'Friendly Critique',  icon: '→', itemSection: 'friendly_critique' },
+  { key: 'questions_answered', label: 'Questions Answered', icon: '?', itemSection: null },
+  { key: 'questions_to_ponder',label: 'Questions to Ponder',icon: '∿', itemSection: 'questions_ponder' },
+  { key: 'sources',            label: 'Sources',            icon: '≡', itemSection: null },
 ]
 
 function formatDate(iso) {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString('en-AU', {
     day: 'numeric', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit'
+    hour: '2-digit', minute: '2-digit',
   })
 }
 
@@ -29,29 +29,23 @@ function formatShortDate(iso) {
   return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
 }
 
-export default function DraftView({ draftTitle, onBack }) {
-  const [versions, setVersions]       = useState([])
-  const [selectedVersion, setSelectedVersion] = useState(null)
-  const [items, setItems]             = useState([])
-  const [loadingVersions, setLoadingVersions] = useState(true)
-  const [loadingItems, setLoadingItems] = useState(false)
-  const [expandedSection, setExpandedSection] = useState(null)
+export default function DraftView({ draftTitle, onBack, onAllFeedback }) {
+  const [versions,         setVersions]         = useState([])
+  const [selectedVersion,  setSelectedVersion]  = useState(null)
+  const [items,            setItems]            = useState([])
+  const [loadingVersions,  setLoadingVersions]  = useState(true)
+  const [loadingItems,     setLoadingItems]     = useState(false)
+  const [expandedSection,  setExpandedSection]  = useState(null)
 
   // Load versions for this draft
-  useEffect(() => {
-    loadVersions()
-  }, [draftTitle])
+  useEffect(() => { loadVersions() }, [draftTitle])
 
   // Load items when selected version changes
-  useEffect(() => {
-    if (selectedVersion) loadItems(selectedVersion.id)
-  }, [selectedVersion])
+  useEffect(() => { if (selectedVersion) loadItems(selectedVersion.id) }, [selectedVersion])
 
   // Close overlay on Escape
   useEffect(() => {
-    function handleKey(e) {
-      if (e.key === 'Escape') setExpandedSection(null)
-    }
+    function handleKey(e) { if (e.key === 'Escape') setExpandedSection(null) }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
   }, [])
@@ -71,12 +65,29 @@ export default function DraftView({ draftTitle, onBack }) {
 
   async function loadItems(runId) {
     setLoadingItems(true)
-    const { data } = await supabase
+
+    // Items for the current run
+    const { data: runItems } = await supabase
       .from('feedback_items')
       .select('*')
       .eq('run_id', runId)
       .order('created_at')
-    setItems(data || [])
+
+    // v3: ALL outstanding questions_ponder for this draft across every version
+    // (they persist until resolved or discarded)
+    const { data: persistentQuestions } = await supabase
+      .from('feedback_items')
+      .select('*')
+      .eq('draft_title', draftTitle)
+      .eq('section', 'questions_ponder')
+      .eq('status', 'outstanding')
+      .order('created_at')
+
+    // Merge: deduplicate by id so current-run questions aren't doubled
+    const runItemIds = new Set((runItems || []).map(i => i.id))
+    const extraQuestions = (persistentQuestions || []).filter(q => !runItemIds.has(q.id))
+
+    setItems([...(runItems || []), ...extraQuestions])
     setLoadingItems(false)
   }
 
@@ -85,29 +96,35 @@ export default function DraftView({ draftTitle, onBack }) {
   }
 
   // Count outstanding items for a section
+  // For questions_ponder this naturally covers cross-version questions since items[] already includes them
   function outstandingFor(sectionKey) {
     return items.filter(i => i.section === sectionKey && i.status === 'outstanding').length
   }
 
-  // Items for a section (for the expanded panel)
   function itemsFor(sectionKey) {
     return items.filter(i => i.section === sectionKey)
   }
 
-  const sections = selectedVersion?.sections || {}
-  const latestRun = versions[0]?.run_at
+  const sections   = selectedVersion?.sections || {}
+  const latestRun  = versions[0]?.run_at
 
   return (
     <div className="draft-view">
+
       {/* Header */}
       <div className="draft-view-header">
-        <button className="back-btn" onClick={onBack}>
-          ← Back
-        </button>
+        <button className="back-btn" onClick={onBack}>← Back</button>
         <h1 className="draft-view-title">{draftTitle}</h1>
-        {latestRun && (
-          <span className="draft-view-meta">Last run: {formatDate(latestRun)}</span>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {latestRun && (
+            <span className="draft-view-meta">Last run: {formatDate(latestRun)}</span>
+          )}
+          {onAllFeedback && (
+            <button className="all-feedback-btn" onClick={onAllFeedback}>
+              All Feedback ↗
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Version timeline */}
@@ -166,18 +183,20 @@ export default function DraftView({ draftTitle, onBack }) {
               <div className="section-panel-title-group">
                 <span className="section-panel-icon">{expandedSection.icon}</span>
                 <h2 className="section-panel-title">{expandedSection.label}</h2>
+                {/* v3 indicator: persistent questions note */}
+                {expandedSection.itemSection === 'questions_ponder' && (
+                  <span className="persistent-badge">∞ persistent</span>
+                )}
               </div>
               <button className="close-btn" onClick={() => setExpandedSection(null)}>×</button>
             </div>
 
             <div className="section-panel-content">
-              {/* Markdown content */}
+              {/* Markdown content from this version */}
               {sections[expandedSection.key] ? (
                 <div
                   className="prose"
-                  dangerouslySetInnerHTML={{
-                    __html: marked.parse(sections[expandedSection.key])
-                  }}
+                  dangerouslySetInnerHTML={{ __html: marked.parse(sections[expandedSection.key]) }}
                 />
               ) : (
                 <p style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
@@ -189,7 +208,14 @@ export default function DraftView({ draftTitle, onBack }) {
               {expandedSection.itemSection && (
                 <>
                   <hr className="items-divider" />
-                  <div className="items-label">Feedback Items</div>
+                  <div className="items-label">
+                    Feedback Items
+                    {expandedSection.itemSection === 'questions_ponder' && (
+                      <span style={{ color: 'var(--gold)', marginLeft: 8, fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
+                        — outstanding questions persist across all versions
+                      </span>
+                    )}
+                  </div>
                   {loadingItems ? (
                     <div className="loading-state"><div className="spinner" /></div>
                   ) : itemsFor(expandedSection.itemSection).length === 0 ? (
