@@ -371,3 +371,36 @@
   .af-version-list    { width: 100%; border-right: none; border-bottom: 1px solid var(--border); padding: 12px 0; flex-direction: row; overflow-x: auto; }
   .af-vi-connector    { display: none; }
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   v3 LAYOUT FIX — appended after initial additions
+   ───────────────────────────────────────────────────────────────── */
+
+/* AllFeedback page: proper height containment so panels scroll */
+.all-feedback-page {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Inherit shared header styles */
+.all-feedback-page .draft-view-header {
+  flex-shrink: 0;
+}
+
+/* Override: remove overflow hidden from row — children scroll themselves */
+.af-timeline-layout {
+  overflow: visible;
+}
+
+/* Both scroll panels need min-height: 0 so flex doesn't block overflow */
+.af-version-list,
+.af-sections-pane {
+  min-height: 0;
+}
+
+/* Items view: same fix */
+.af-items-view {
+  min-height: 0;
+}
