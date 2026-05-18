@@ -10,6 +10,7 @@ const SECTION_META = [
   { key: 'quick_wins',         label: 'Quick Wins',         icon: '↑' },
   { key: 'friendly_critique',  label: 'Friendly Critique',  icon: '→' },
   { key: 'questions_answered', label: 'Questions Answered', icon: '?' },
+  { key: 'questions_dialogue', label: 'Questions & Goals',  icon: '⟲' },
   { key: 'questions_to_ponder',label: 'Questions to Ponder',icon: '∿' },
   { key: 'sources',            label: 'Sources',            icon: '≡' },
 ]
@@ -42,7 +43,11 @@ function formatShortDate(iso) {
   return new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })
 }
 
-// ── Collapsible section card used in Timeline tab ──────────────────────────
+function formatTopicLabel(slug) {
+  return slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
+// ── Collapsible section card (Timeline tab) ────────────────────────────────
 function SectionCard({ secMeta, content, defaultOpen }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
@@ -67,6 +72,119 @@ function SectionCard({ secMeta, content, defaultOpen }) {
   )
 }
 
+// ── Single item card (shared by flat + grouped views) ─────────────────────
+function ItemCard({ item, runToVersion, onAction }) {
+  return (
+    <div className={`af-item ${item.status}`}>
+      <div className="af-item-meta">
+        <span className="af-item-section">{item.section?.replace(/_/g, ' ')}</span>
+        <span className="af-item-version">V{runToVersion[item.run_id] || '?'}</span>
+        {item.section === 'questions_ponder' && item.status === 'outstanding' && (
+          <span className="af-item-persistent">∞ persistent</span>
+        )}
+      </div>
+      <div className="af-item-content">{item.content}</div>
+      {item.verification_notes && (
+        <div className="verification-notes">↳ {item.verification_notes}</div>
+      )}
+      <div className="af-item-actions">
+        {item.status === 'outstanding' && (
+          <>
+            <button className="item-btn discard"   onClick={() => onAction(item.id, 'discarded')}>Discard</button>
+            <button className="item-btn implement" onClick={() => onAction(item.id, 'pending_implementation')}>Implement</button>
+          </>
+        )}
+        {item.status === 'discarded' && (
+          <button className="item-btn undiscard" onClick={() => onAction(item.id, 'outstanding')}>Restore</button>
+        )}
+        {item.status === 'pending_implementation' && (
+          <span className="item-status-badge pending">⟳ Pending your edit</span>
+        )}
+        {(item.status === 'verified_success' || item.status === 'verified_partial') && (
+          <span className={`item-status-badge ${item.status}`}>
+            {item.status === 'verified_success' ? '✓ Verified' : '◑ Partial'}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Topic group (used in By Topic view) ───────────────────────────────────
+function TopicGroup({ slug, items, runToVersion, onAction }) {
+  const [open, setOpen] = useState(true)
+  const versionCount = new Set(items.map(i => i.run_id)).size
+  const label = slug ? formatTopicLabel(slug) : 'Uncategorized'
+
+  return (
+    <div className="af-topic-group">
+      <button className="af-topic-group-header" onClick={() => setOpen(o => !o)}>
+        <span className="af-topic-label">{label}</span>
+        <div className="af-topic-meta">
+          <span className="af-topic-count">{items.length} item{items.length !== 1 ? 's' : ''}</span>
+          {versionCount > 1 && (
+            <span className="af-topic-versions">{versionCount} versions</span>
+          )}
+          <span className="af-topic-chevron">{open ? '↑' : '↓'}</span>
+        </div>
+      </button>
+      {open && (
+        <div className="af-topic-items">
+          {items.map(item => (
+            <ItemCard key={item.id} item={item} runToVersion={runToVersion} onAction={onAction} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── By Topic view ──────────────────────────────────────────────────────────
+function TopicGroupView({ items, runToVersion, onAction }) {
+  const groups = {}
+  const noGroup = []
+  for (const item of items) {
+    if (item.topic_group) {
+      if (!groups[item.topic_group]) groups[item.topic_group] = []
+      groups[item.topic_group].push(item)
+    } else {
+      noGroup.push(item)
+    }
+  }
+
+  const sortedGroups = Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]))
+
+  if (sortedGroups.length === 0 && noGroup.length === 0) {
+    return (
+      <div className="empty-state" style={{ minHeight: 120 }}>
+        <div className="empty-state-text">No items match this filter</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="af-topic-groups">
+      {sortedGroups.map(([slug, groupItems]) => (
+        <TopicGroup
+          key={slug}
+          slug={slug}
+          items={groupItems}
+          runToVersion={runToVersion}
+          onAction={onAction}
+        />
+      ))}
+      {noGroup.length > 0 && (
+        <TopicGroup
+          slug={null}
+          items={noGroup}
+          runToVersion={runToVersion}
+          onAction={onAction}
+        />
+      )}
+    </div>
+  )
+}
+
 // ── Timeline Tab ───────────────────────────────────────────────────────────
 function TimelineView({ versions }) {
   const [selectedId, setSelectedId] = useState(
@@ -76,7 +194,6 @@ function TimelineView({ versions }) {
 
   return (
     <div className="af-timeline-layout">
-      {/* Left: version list */}
       <div className="af-version-list">
         <div className="af-list-label">Iterations</div>
         {[...versions].reverse().map((v, i) => {
@@ -98,7 +215,6 @@ function TimelineView({ versions }) {
         })}
       </div>
 
-      {/* Right: sections for selected version */}
       <div className="af-sections-pane">
         {selected ? (
           <>
@@ -127,7 +243,8 @@ function TimelineView({ versions }) {
 // ── All Items Tab ──────────────────────────────────────────────────────────
 function ItemsView({ items, versions, onItemUpdate }) {
   const [filterSection, setFilterSection] = useState('all')
-  const [filterStatus, setFilterStatus]   = useState('all')
+  const [filterStatus,  setFilterStatus]  = useState('all')
+  const [viewMode,      setViewMode]      = useState('flat') // 'flat' | 'by-topic'
 
   const filtered = items.filter(item => {
     if (filterSection !== 'all' && item.section !== filterSection) return false
@@ -135,7 +252,6 @@ function ItemsView({ items, versions, onItemUpdate }) {
     return true
   })
 
-  // Map run_id → version number (1-indexed, oldest first)
   const runToVersion = {}
   versions.forEach((v, i) => { runToVersion[v.id] = i + 1 })
 
@@ -189,51 +305,36 @@ function ItemsView({ items, versions, onItemUpdate }) {
             >{s.label}</button>
           ))}
         </div>
+        <div className="af-view-toggle">
+          <button
+            className={`af-view-pill${viewMode === 'flat' ? ' active' : ''}`}
+            onClick={() => setViewMode('flat')}
+            title="Flat list"
+          >≡ Flat</button>
+          <button
+            className={`af-view-pill${viewMode === 'by-topic' ? ' active' : ''}`}
+            onClick={() => setViewMode('by-topic')}
+            title="Group by topic"
+          >⊞ Topic</button>
+        </div>
       </div>
 
-      {/* Item list */}
-      <div className="af-items-list">
-        {filtered.length === 0 ? (
-          <div className="empty-state" style={{ minHeight: 120 }}>
-            <div className="empty-state-text">No items match this filter</div>
-          </div>
-        ) : (
-          filtered.map(item => (
-            <div key={item.id} className={`af-item ${item.status}`}>
-              <div className="af-item-meta">
-                <span className="af-item-section">{item.section?.replace(/_/g, ' ')}</span>
-                <span className="af-item-version">V{runToVersion[item.run_id] || '?'}</span>
-                {item.section === 'questions_ponder' && item.status === 'outstanding' && (
-                  <span className="af-item-persistent">∞ persistent</span>
-                )}
-              </div>
-              <div className="af-item-content">{item.content}</div>
-              {item.verification_notes && (
-                <div className="verification-notes">↳ {item.verification_notes}</div>
-              )}
-              <div className="af-item-actions">
-                {item.status === 'outstanding' && (
-                  <>
-                    <button className="item-btn discard"    onClick={() => handleAction(item.id, 'discarded')}>Discard</button>
-                    <button className="item-btn implement"  onClick={() => handleAction(item.id, 'pending_implementation')}>Implement</button>
-                  </>
-                )}
-                {item.status === 'discarded' && (
-                  <button className="item-btn undiscard" onClick={() => handleAction(item.id, 'outstanding')}>Restore</button>
-                )}
-                {item.status === 'pending_implementation' && (
-                  <span className="item-status-badge pending">⟳ Pending your edit</span>
-                )}
-                {(item.status === 'verified_success' || item.status === 'verified_partial') && (
-                  <span className={`item-status-badge ${item.status}`}>
-                    {item.status === 'verified_success' ? '✓ Verified' : '◑ Partial'}
-                  </span>
-                )}
-              </div>
+      {/* Items — flat or grouped */}
+      {viewMode === 'by-topic' ? (
+        <TopicGroupView items={filtered} runToVersion={runToVersion} onAction={handleAction} />
+      ) : (
+        <div className="af-items-list">
+          {filtered.length === 0 ? (
+            <div className="empty-state" style={{ minHeight: 120 }}>
+              <div className="empty-state-text">No items match this filter</div>
             </div>
-          ))
-        )}
-      </div>
+          ) : (
+            filtered.map(item => (
+              <ItemCard key={item.id} item={item} runToVersion={runToVersion} onAction={handleAction} />
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -281,20 +382,15 @@ export default function AllFeedback({ draftTitle, onBack }) {
         </span>
       </div>
 
-      {/* Tab bar */}
       <div className="af-tabs">
         <button
           className={`af-tab${activeTab === 'timeline' ? ' active' : ''}`}
           onClick={() => setActiveTab('timeline')}
-        >
-          Timeline
-        </button>
+        >Timeline</button>
         <button
           className={`af-tab${activeTab === 'items' ? ' active' : ''}`}
           onClick={() => setActiveTab('items')}
-        >
-          All Items
-        </button>
+        >All Items</button>
       </div>
 
       {loading ? (
