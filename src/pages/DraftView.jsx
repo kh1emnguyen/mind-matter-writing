@@ -12,6 +12,7 @@ const SECTIONS = [
   { key: 'quick_wins',         label: 'Quick Wins',         icon: '↑', itemSection: 'quick_wins' },
   { key: 'friendly_critique',  label: 'Friendly Critique',  icon: '→', itemSection: 'friendly_critique' },
   { key: 'questions_answered', label: 'Questions Answered', icon: '?', itemSection: null },
+  { key: 'questions_dialogue', label: 'Questions & Goals',  icon: '⟲', itemSection: null },
   { key: 'questions_to_ponder',label: 'Questions to Ponder',icon: '∿', itemSection: 'questions_ponder' },
   { key: 'sources',            label: 'Sources',            icon: '≡', itemSection: null },
 ]
